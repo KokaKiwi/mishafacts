@@ -5,11 +5,17 @@ from argparse import ArgumentParser
 
 GLOB_PATTERN = '*.rpy'
 MISHA_PATTERN = r'mi "(?P<sentence>[^"]+)"'
+REMOVE_PATTERNS = [
+    r'~',
+    r'\{[^}]+\}',
+]
 
 def fetch_file(input_file):
     pattern = re.compile(MISHA_PATTERN)
 
     def extract(line):
+        for remove_pattern in REMOVE_PATTERNS:
+            line = re.sub(remove_pattern, '', line)
         m = pattern.match(line)
         if m:
             return m.group('sentence')
