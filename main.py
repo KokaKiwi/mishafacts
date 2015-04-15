@@ -24,3 +24,7 @@ SOURCE = Source('misha.txt')
 @app.route('/')
 def home():
     return SOURCE.gen()
+
+@app.route('/about')
+def about():
+    return 'https://github.com/KokaKiwi/mishafacts'
