@@ -1,6 +1,7 @@
 import random
 from flask import Flask
-from flask import render_template
+from flask import render_template, request, Response
+from functools import wraps
 from markovgen import Markov
 
 DICT_FILE = 'misha.{lang}.txt'
@@ -21,13 +22,12 @@ class Source(object):
         with open(dict_file) as f:
             self.markov.feed_from_file(f, str)
 
-    def gen(self, size=20):
-        seed = None
-
+    @property
+    def seed(self):
         seeds = self.seeds.get(self.lang, [])
-        if len(seeds) > 0:
-            seed = random.choice(seeds)
+        return random.choice(seeds) if len(seeds) > 0 else None
 
+    def gen(self, seed=None, size=20):
         text = self.markov.generate_markov_text(seed=seed, max_size=size)
         text = text.strip()
 
@@ -35,6 +35,21 @@ class Source(object):
 
 LANGS = ['fr', 'en', 'es']
 SOURCES = dict([(lang, Source(lang)) for lang in LANGS])
+
+# Utils
+def content_type(mimetype):
+    def wrapper(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            res = f(*args, **kwargs)
+
+            if not isinstance(res, Response):
+                res = Response(res)
+
+            res.content_type = mimetype
+            return res
+        return wrapper
+    return wrapper
 
 # App
 app = Flask(__name__)
@@ -44,17 +59,28 @@ def home():
     return render_template('home.html')
 
 @app.route('/<lang>')
+@content_type('text/plain')
 def gen(lang):
+    '''
+        ?seed=<seed>    - Choose a start word. (default: choose from a list)
+        ?size=<size>    - Set the max sentence size. (default: 20)
+        ?noseed         - Do not choose automatically a seed.
+    '''
+    if 'help' in request.args:
+        return Response(gen.__doc__)
+
     source = SOURCES.get(lang)
+
+    seed = request.args.get('seed', source.seed)
+    size = request.args.get('size', 20)
+
+    if 'noseed' in request.args:
+        seed = None
 
     if source is None:
         return 'Lang not found. :('
 
-    return source.gen()
-
-@app.route('/about')
-def about():
-    return 'https://github.com/KokaKiwi/mishafacts'
+    return Response(source.gen(seed=seed, size=size))
 
 if __name__ == '__main__':
     app.run(debug=True)
