@@ -1,58 +1,72 @@
 #!/usr/bin/env python
-import glob2
 import re
 from argparse import ArgumentParser
+from collections import defaultdict
+from pathlib import Path
 
-GLOB_PATTERN = '*.rpy'
+GLOB_PATTERN = '**/script-*.rpy'
+
+SCRIPT_PATTERN = r'(.+)_(?P<lang>[A-Z]{2})\.rpy$'
+SCRIPT_PATTERN = re.compile(SCRIPT_PATTERN)
+
 MISHA_PATTERN = r'mi "(?P<sentence>[^"]+)"'
+MISHA_PATTERN = re.compile(MISHA_PATTERN)
+
 REMOVE_PATTERNS = [
     r'~',
     r'\{[^}]+\}',
 ]
+REMOVE_PATTERNS = [re.compile(pattern) for pattern in REMOVE_PATTERNS]
 
 def fetch_file(input_file):
-    pattern = re.compile(MISHA_PATTERN)
-
     def extract(line):
-        for remove_pattern in REMOVE_PATTERNS:
-            line = re.sub(remove_pattern, '', line)
-        m = pattern.match(line)
+        sentence = None
+
+        m = MISHA_PATTERN.match(line)
         if m:
-            return m.group('sentence')
+            sentence = m.group('sentence')
+            for pattern in REMOVE_PATTERNS:
+                sentence = pattern.sub('', sentence)
 
-        return None
+        return sentence
 
-    is_something = lambda o: o is not None
+    with input_file.open() as f:
+        sentences = map(extract, f)
+        sentences = filter(bool, sentences)
+        sentences = list(sentences)
 
-    with open(input_file) as f:
-        lines = filter(is_something, map(extract, f))
-        sentences = list(lines)
         return sentences
 
-def fetch(input_folder, output_file):
-    def is_en(filename):
-        m = re.match(r'(.*)_[A-Z]{2}\.rpy$', filename)
-        return m is None
+def fetch(input_dir, output_dir):
+    langs = defaultdict(list)
 
-    input_pattern = '%s/%s' % (input_folder, GLOB_PATTERN)
-    input_files = list(glob2.iglob(input_pattern))
-    input_files = filter(is_en, input_files)
+    for path in input_dir.glob(GLOB_PATTERN):
+        lang = 'en'
 
-    sentences = []
-    for file in input_files:
-        sentences += fetch_file(file)
+        m = SCRIPT_PATTERN.match(path.name)
+        if m:
+            lang = m.group('lang').lower()
 
-    with open(output_file, 'w+') as f:
-        for sentence in sentences:
-            f.write('%s\n' % (sentence))
+        langs[lang].append(path)
+
+    if not output_dir.exists():
+        output_dir.mkdir(parents=True)
+
+    for (lang, paths) in langs.items():
+        output_file = output_dir / ('misha.%s.txt' % (lang))
+
+        with output_file.open('w+') as f:
+            for path in paths:
+                for sentence in fetch_file(path):
+                    f.write('%s\n' % (sentence))
 
 # Main
 parser = ArgumentParser()
-parser.add_argument('input_folder')
-parser.add_argument('output_file')
+parser.add_argument('input_dir', type=Path, help='Pass the Katawa Shoujo folder with decompiled sources containing sentences')
+parser.add_argument('output_dir', type=Path, help='Output directory.')
 
 def main(args):
-    fetch(args.input_folder, args.output_file)
+    fetch(args.input_dir, args.output_dir)
 
 if __name__ == '__main__':
     main(parser.parse_args())
