@@ -80,7 +80,7 @@ def gen(lang):
     if source is None:
         return 'Lang not found. :('
 
-    return Response(source.gen(seed=seed, size=size))
+    return Response(source.gen(seed=seed, size=int(size)))
 
 if __name__ == '__main__':
     app.run(debug=True)
