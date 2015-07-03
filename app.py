@@ -37,18 +37,20 @@ LANGS = ['fr', 'en', 'es']
 SOURCES = dict([(lang, Source(lang)) for lang in LANGS])
 
 # Utils
-def content_type(mimetype):
+def content_type(mimetype, charset=None):
     def wrapper(f):
         @wraps(f)
-        def wrapper(*args, **kwargs):
+        def wrapped(*args, **kwargs):
             res = f(*args, **kwargs)
 
             if not isinstance(res, Response):
                 res = Response(res)
 
             res.content_type = mimetype
+            if charset is not None:
+                res.content_type += '; charset=%s' % (charset)
             return res
-        return wrapper
+        return wrapped
     return wrapper
 
 # App
@@ -59,7 +61,7 @@ def home():
     return render_template('home.html')
 
 @app.route('/<lang>')
-@content_type('text/plain')
+@content_type('text/plain', charset='utf-8')
 def gen(lang):
     '''
         ?seed=<seed>    - Choose a start word. (default: choose from a list)
@@ -71,14 +73,14 @@ def gen(lang):
 
     source = SOURCES.get(lang)
 
+    if source is None:
+        return 'Lang not found. :('
+
     seed = request.args.get('seed', source.seed)
     size = request.args.get('size', 20)
 
     if 'noseed' in request.args:
         seed = None
-
-    if source is None:
-        return 'Lang not found. :('
 
     return Response(source.gen(seed=seed, size=int(size)))
 
